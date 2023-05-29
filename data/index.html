@@ -1,14 +1,173 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
   <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Document</title>
+    <title>Chat com WebSocket</title>
+    <style>
+      * {
+        font-size: 1.8rem;
+      }
+      html {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      #container {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        align-items: center;
+        justify-content: end;
+      }
+
+      #chat-box {
+        width: 95%;
+        overflow-y: scroll;
+        box-sizing: border-box;
+        background-color: #fff;
+      }
+
+      #message-form {
+        display: flex;
+        flex-direction: row;
+        width: 95%;
+        justify-content: space-between;
+      }
+
+      #message-input {
+        width: 74%;
+        padding: 1.2rem;
+        border-radius: 100px;
+        border: 1px solid #888888;
+        margin: 1rem 0;
+        box-sizing: border-box;
+      }
+
+      #send-button {
+        width: 24%;
+        padding: 1.2rem;
+        margin: 1rem 0;
+        box-sizing: border-box;
+        border-radius: 100px;
+        background-color: #4caf50;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+      }
+
+      .mensagem {
+        padding: 0.8rem;
+        border-radius: 100px;
+      }
+
+      .initial-screen {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+      }
+
+      .initial-screen button {
+        margin: 0.5rem;
+        padding: 1.2rem 2rem;
+        border-radius: 100px;
+        background-color: #4caf50;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+      }
+    </style>
+    <script src="/script.js"></script>
   </head>
   <body>
-    <div>
-      <h1>testee</h1>
+    <div id="container">
+      <!-- Tela inicial -->
+      <div id="initial-screen" class="initial-screen">
+        <h2>Selecione uma opção:</h2>
+        <button onclick="selectOption('Joao')">Joao</button>
+        <button onclick="selectOption('Arthur')">Arthur</button>
+        <button onclick="selectOption('Netinho')">Netinho</button>
+        <button onclick="selectOption('Marcos')">Marcos</button>
+        <button onclick="selectOption('Gabriel')">Gabriel</button>
+      </div>
+
+      <!-- Caixa de chat -->
+      <div id="chat-box" style="display: none;">
+        <div id="chat-messages"></div>
+      </div>
+      <form id="message-form" style="display: none;">
+        <input
+          type="text"
+          id="message-input"
+          placeholder="Digite sua mensagem"
+          autofocus
+          maxlength="100"
+        />
+        <button type="submit" id="send-button">Enviar</button>
+      </form>
     </div>
+
+    <script>
+      let selectedOption = null; // Variável para armazenar a opção selecionada
+
+      function selectOption(option) {
+        selectedOption = option;
+
+        // Esconder a tela inicial e mostrar a caixa de chat
+        document.getElementById("initial-screen").style.display = "none";
+        document.getElementById("chat-box").style.display = "block";
+        document.getElementById("message-form").style.display = "block";
+
+        // Colocar o foco no campo de entrada de mensagem
+        document.getElementById("message-input").focus();
+      }
+
+      $(document).ready(function () {
+        // Estabelece uma conexão WebSocket
+        const socket = new WebSocket("ws://192.168.4.1:8080");
+
+        // Manipulador de eventos para a abertura da conexão WebSocket
+        socket.onopen = function (event) {
+          console.log("Conexão estabelecida.");
+        };
+
+        // Manipulador de eventos para receber mensagens WebSocket
+        socket.onmessage = function (event) {
+          var message = event.data;
+          message = JSON.parse(message);
+          $("#chat-messages").append(
+            `<p class="mensagem">` + message.usuario + ": " + message.mensagem + "</p>"
+          );
+        };
+
+        // Manipulador de eventos para o envio do formulário de mensagem
+        $("#message-form").submit(function (event) {
+          event.preventDefault(); // Impede o envio do formulário padrão
+
+          const message = $("#message-input").val();
+
+          // Envia a mensagem para o servidor usando POST
+          $.post("/enviar", { mensagem: message, usuario: selectedOption })
+            .done(function (response) {
+              console.log("Mensagem enviada com sucesso");
+            })
+            .fail(function (error) {
+              console.error("Erro ao enviar mensagem:", error);
+            });
+
+          $("#message-input").val("");
+          document.getElementById("message-input").focus();
+        });
+      });
+    </script>
   </body>
 </html>

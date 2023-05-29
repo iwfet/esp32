@@ -3,26 +3,22 @@
 #include <ESPAsyncWebServer.h>
 #include <FS.h>
 #include <SPIFFS.h>
+#include <WebSocketsServer.h>
 #include <ArduinoJson.h>
 
+
 AsyncWebServer server(80);
+WebSocketsServer webSocket(8080);
 
-const char* ssid = "NomeDaRede";       // Nome da rede Wi-Fi
-const char* password = "SenhaDaRede";  // Senha da rede Wi-Fi
-
+const char* ssid = "OsCheirosos";       // Nome da rede Wi-Fi
+const char* password = "OsCheirosos";  // Senha da rede Wi-Fi
 void setup() {
   Serial.begin(115200);
-
-  // Inicializar o modo Wi-Fi como Access Point
   WiFi.mode(WIFI_AP);
-
-  // Configurar as informações da rede Wi-Fi
   WiFi.softAP(ssid, password);
-
   IPAddress IP = WiFi.softAPIP();
   Serial.print("Endereço IP do Access Point: ");
   Serial.println(IP);
-
   if (!SPIFFS.begin()) {
     Serial.println("Falha ao montar sistema de arquivos SPIFFS");
     return;
@@ -32,58 +28,66 @@ void setup() {
   server.on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
     request->send(SPIFFS, "/index.html", "text/html");
   });
+  
+   server.on("/script.js", HTTP_GET, [](AsyncWebServerRequest* request) {
+    request->send(SPIFFS, "/script.js", "text/javascript");
+  });
 
-  server.on("/mensagem", HTTP_POST, [](AsyncWebServerRequest* request) {
-    if (request->contentType() == "application/json") {
-      // Ler o JSON recebido
-      DynamicJsonDocument doc(1024);  // Tamanho máximo do JSON
-      deserializeJson(doc, request->getContent());
+ server.on("/enviar", HTTP_POST, [](AsyncWebServerRequest* request){
+    if(request->hasParam("mensagem", true)){
+      String mensagem = request->getParam("mensagem", true)->value();
+        String usuario = request->getParam("usuario", true)->value();
       
-      // Armazenar o JSON em um array
-      File file = SPIFFS.open("/data.json", "a");  // Abre o arquivo em modo de adição (append)
-      if (!file) {
-        Serial.println("Falha ao abrir o arquivo JSON");
-        request->send(500);
-        return;
-      }
+      StaticJsonDocument<200> jsonDoc;
+      jsonDoc["mensagem"] = mensagem;
+      jsonDoc["usuario"] = usuario;
+
+      String jsonStr;
+      serializeJson(jsonDoc, jsonStr);
       
-      serializeJson(doc, file);
-      file.println();  // Adiciona uma nova linha após cada JSON para facilitar a leitura posteriormente
-      file.close();
+      webSocket.broadcastTXT(jsonStr);
       
-      request->send(200);
-    } else {
-      request->send(400);
+      request->send(200, "text/plain", "Mensagem enviada com sucesso");
+    }
+    else{
+      request->send(400, "text/plain", "Parâmetro 'mensagem' ausente");
     }
   });
 
-  server.on("/arquivo", HTTP_GET, [](AsyncWebServerRequest* request){
-  File file = SPIFFS.open("/data.json", "r"); // Abre o arquivo JSON para leitura
-  if (!file) {
-    Serial.println("Falha ao abrir o arquivo JSON");
-    request->send(404); // Retorna código 404 (Not Found) se o arquivo não for encontrado
-    return;
-  }
+  webSocket.begin();
 
-  size_t fileSize = file.size();
-  if (fileSize > 0) {
-    std::unique_ptr<char[]> buf(new char[fileSize]);
-
-    file.readBytes(buf.get(), fileSize);
-
-    request->send(200, "application/json", buf.get(), fileSize); // Retorna o conteúdo do arquivo JSON como resposta
-  } else {
-    request->send(500); // Retorna código 500 (Internal Server Error) se o arquivo estiver vazio
-  }
-
-  file.close();
-});
-
-
-  // Inicializar servidor
   server.begin();
 }
 
 void loop() {
-  // O código principal do seu programa pode ser colocado aqui
+  webSocket.loop();
+}
+
+
+
+bool listDir() {
+  File root = SPIFFS.open("/"); 
+  if (!root)   {
+    Serial.println(" - falha ao abrir o diretório");
+    return false;
+  }
+  File file = root.openNextFile();
+  int qtdFiles = 0;
+  while (file) { 
+    Serial.print("  FILE : ");
+    Serial.print(file.name()); // Imprime o nome do arquivo
+    Serial.print("\tSIZE : ");
+    Serial.println(file.size()); // Imprime o tamanho do arquivo
+    qtdFiles++; // Incrementa a variável de quantidade de arquivos
+    file = root.openNextFile();
+  }
+  if (qtdFiles == 0)  // Se após a visualização de todos os arquivos do diretório
+    //                      não houver algum arquivo, ...
+  {
+    // Avisa o usuário que não houve nenhum arquivo para ler e retorna false.
+    Serial.print(" - Sem arquivos para ler. Crie novos arquivos pelo menu ");
+    Serial.println("principal, opção 2.");
+    return false;
+  }
+  return true; // retorna true se não houver nenhum erro
 }
